@@ -1,0 +1,193 @@
+---
+title: "task1"
+author: "Qin"
+date: "2/21/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readr)
+library(tidyverse)
+library(forcats)
+rm(list=ls())
+```
+
+# 1.	Read in the reddit dataset correctly and provide evidence of your code. [1 point]
+```{r}
+setwd("/Users/yueziqin/Downloads")
+reddit <- read_csv("RS_2017-09_filtered70.csv")
+head(reddit)
+```
+# 2.	Remove the first column of the data frame and provide evidence. [1 point]
+```{r}
+reddit<-reddit %>% select(-1)
+head(reddit)
+```
+
+# 3.	Correctly identify and remove the columns that contain no data. Provide a list of the variables removed and evidence of your code. [3 points]
+```{r}
+nacol <- sapply(reddit, function(x) all(is.na(x)))
+colnames(reddit[,nacol])
+reddit <- reddit %>% 
+  select(-colnames(reddit[, nacol]))
+colnames(reddit)
+head(reddit)
+```
+# 4.	Your code correctly identified and removed the columns that contained only one value. Provide a list of the variables removed and evidence of your code. [3 point]
+```{r}
+uniquecol <- sapply(reddit, function(x) length(unique(x)) == 1)
+colnames(reddit[,uniquecol])
+reddit<-reddit %>%
+  select(-colnames(reddit[, uniquecol]))
+colnames(reddit)
+head(reddit)
+```
+
+# 5.	Convert the variables created_utc and retrieved_on to unordered factors containing the weekdays. Provide tables of the frequencies for the two new variables and evidence of your code. [4 points]
+```{r}
+Sys.setenv(TZ='UTC')
+class(reddit$retrieved_on) <- c('POSIXt','POSIXct')
+class(reddit$created_utc) <- c('POSIXt','POSIXct')
+reddit$retrieved_weekday <- factor(format(reddit$retrieved_on, '%A'), ordered = F)
+reddit$created_weekday <- factor(format(reddit$created_utc, '%A'), ordered = F)
+
+levels(reddit$retrieved_weekday)
+levels(reddit$created_weekday)
+
+table(reddit$retrieved_weekday)
+table(reddit$created_weekday)
+```
+
+# 6.	Your code successfully converts the titles of the reddit posts to an incidence matrix of the words that appear in at least 500 posts. Provide a list of the words that appear in at least 500 posts and incorporate the incidence matrix into the reddit data frame. Provided evidence of your code. [10 points] Include the name/s of any associated code (.r) script file/s related to Step 6 that are included in your .zip file:
+```{r}
+library(tidytext)
+title <- reddit$title
+text_df <- data.frame(title_id=1:length(title),title)
+tidy_title <- text_df %>%
+  unnest_tokens(word, title)
+word <- tidy_title %>%
+  count(word, sort = TRUE) %>%
+  filter(n >= 500) %>%
+  mutate(len = nchar(word)) %>%
+  filter(len > 3) %>%
+  filter(word != c("the")) %>%
+  select(word)
+na <- c(str_subset(word$word, "['.1234567890]"))
+word <- word[-which(word$word %in% na),]
+word
+mat <- sapply(t(word), function(x) grepl(x, reddit$title))
+reddit <- cbind(reddit, mat)
+reddit[, 54:215] <- sapply(reddit[, 54:215], as.numeric)
+```
+
+# 7.	Your code correctly identifies all factors where at least one level occurs less than 30 times and recodes them by amalgamating levels appropriately. Provide a list of the factors that were recoded and provide evidence of your code. [4 points]
+```{r}
+df <- reddit %>%
+  select_if(is.character) %>%
+  sapply(function(x) fct_lump_min(x, 30, other_level = "Other"))
+idf <- apply(df, MARGIN = 2, function(col) {any(col == 'Other')})
+reddit <- cbind(reddit %>% 
+                  select(-colnames(df)), df)
+colnames(df)[!is.na(idf)]
+
+```
+# 8.	Your code correctly identifies all factors with more than 100 levels and recodes them by amalgamating levels appropriately. Provide a list of the factors that were recoded and evidence of your code. [4 points]
+```{r}
+df <- reddit %>%
+  select_if(is.character) %>%
+  sapply(function(x) fct_lump_n(x,100,other_level = "Other"))
+a <- sapply(df, unique)
+n <- sapply(a, length)
+colnames(df)
+reddit <- cbind(reddit %>%
+                  select(-colnames(df)),df)
+```
+# 9.	Your code correctly identifies and removes all factors that cannot be suitably recoded so that each level occurs at least 30 times. Provide a list of the factors that were removed and evidence of your code. [3 points]
+```{r}
+df <- reddit %>%
+  select_if(is.character)
+cols <- df %>%
+  gather(x,value) %>%
+  group_by(x, value) %>%
+  filter(n() < 30)
+unique(cols$x)
+reddit <- reddit %>% select(-unique(cols$x))
+```
+# 10.	Your code correctly identifies and removes all columns with an excessive number of missing values. Provide a list of the variables that were removed and evidence of your code. [3 points]
+```{r}
+colnames(reddit)[-colSums(is.na(reddit)) == 0]
+reddit <- reddit[ , colSums(is.na(reddit)) == 0]
+```
+# 11.	Provide a list of the remaining factors and the number of levels in the reddit data frame at the end of the data cleaning steps. [1 point]
+```{r}
+reddit<-select(reddit,-retrieved_on,-created_utc)
+reddit <- reddit %>%
+  mutate_if(is.character, as.factor)
+str(reddit)
+```
+
+
+# 12.	Correctly identify the numerical predictor variables. Correctly plot the score against each of the numerical predictor variables, with and without the transformation. Clearly state your conclusion about whether the transformations should be applied. [5 points]
+```{r}
+load('clean.RData')
+numpred <- reddit %>%
+  select_if(is.numeric)
+ggplot()+stat_bin_hex(data=numpred,aes(x=num_comments,y=score))
+numpred$num_comments<-log(1+numpred$num_comments)
+numpred$score<-log(1+numpred$score)
+ggplot()+stat_bin_hex(data=numpred,aes(x=num_comments,y=score))
+reddit$num_comments <- numpred$num_comments
+reddit$score <- numpred$score
+```
+I think a lot of transformation should be performed, since after the transformation, the pattern is clearer.
+
+# 13.	Correctly fit the multiple linear regression model to the data. Obtain relevant diagnostic plots and state your conclusion about the model assumptions. Provide a concise summary of the model fit and evidence of your code. [6 points]
+```{r}
+library(broom)
+fit1 <- lm(data = reddit, formula = score ~ .)
+plot(fit1)
+glance(fit1)
+```
+Form the residual plot, there are some clear pattern in the residual plot.
+# 14.	Correctly identify all factors affected by aliasing in the regression model and update the model to remove those factors. Provide a list of the factors removed from the regression model and evidence of your code.[3 points]
+```{r}
+names(coef(fit1))[is.na(coef((fit1)))]
+reddit1 <- reddit %>%
+select(-c("author_flair_text", "crosspost_parent_list", "disable_comments", "domain",
+                                                 "href_url", "parent_whitelist_status", "preview", "promoted", "secure_media_embed",
+                                                 "subreddit", "subreddit_id", "whitelist_status"))
+fit2 <- lm(data = reddit1, formula = score ~ . )
+names(coef(fit2))[is.na(coef((fit2)))]
+```
+# 15.	Apply an appropriate statistical criterion to determine whether the variables author_cakeday and contest_mode should be included in the regression model. Clearly state your conclusion and provide evidence of your code. [2 points]
+```{r}
+sum1 <- summary(fit2)
+sum1$coefficients["author_cakedayTrue", ]
+sum1$coefficients["contest_modeTrue", ]
+```
+I think both of them should be included.
+# 16.	Correctly obtain predictions and prediction intervals for the score in the two specified cases, part (a) and part (b). Provide evidence of your code. [7 points]
+```{r}
+pre1 <- predict(fit2,reddit1[1400,],interval = "predict")
+pre1
+exp(pre1[1, 2:3])
+newdata <- reddit1[1400,]
+newdata$author <- 'Other'
+newdata$num_crossposts <- 7
+
+pre2 <- predict(fit2,newdata,interval = "predict")
+pre2
+exp(pre2[1, 2:3])
+```
+
+
+
+
+
+
+
+
+
+
+

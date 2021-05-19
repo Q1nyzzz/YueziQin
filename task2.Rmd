@@ -1,0 +1,93 @@
+---
+title: "task2"
+author: "Qin"
+date: "2/22/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# 1.	Read in the reddit dataset correctly and provide evidence of your code.  
+```{r}
+load("clean.RData")
+head(reddit) 
+```
+
+# 2.	Build a classifier based on the six factors and provide the classifier information. Provide the correct analysis about the factors. 
+```{r}
+test_factors <- c('over_18', "is_self", "is_reddit_media_domain", "is_video", "stickied", "spoiler")
+model<-as.formula(paste("brand_safe~", paste(test_factors, collapse="+")))
+library(pROC)
+fit1<-glm(model,data=reddit,family = binomial())
+summary(fit1)
+```
+
+# 3.	Build a classifier based on the six factors and the additional factor. Provide the learned classifier information. Provide the correct comparison analysis between the built model and the model built in the previous step. 
+```{r}
+test_factors <- c('over_18', "is_self", "is_reddit_media_domain", "is_video", "stickied", "spoiler",'num_crossposts')
+model<-as.formula(paste("brand_safe~", paste(test_factors, collapse="+")))
+fit2<-glm(model,data=reddit,family = binomial())
+summary(fit2)
+```
+The AIC for this model is 168739 and the AIC for previous model is 168758, so model 1 has lower AIC and fit better.
+
+Model/feature selection
+# 1.	Perform model selection and produce the correct selection results. Provide your result and associated code. 
+```{r}
+library (leaps)
+test_factors <- c('over_18', "is_self", "is_reddit_media_domain", "is_video", "stickied", "spoiler")
+model<-as.formula(paste("brand_safe~", paste(test_factors, collapse="+")))
+fit3<-regsubsets(model,data = reddit,nvmax =3,method = 'forward')
+coef(fit3 ,3)
+```
+
+# 2.	Perform model selection using another method and produce the correct selection results. Provide your result and associated code
+```{r}
+test_factors <- c('over_18', "is_self", "is_reddit_media_domain", "is_video", "stickied", "spoiler")
+model<-as.formula(paste("brand_safe~", paste(test_factors, collapse="+")))
+fit4<-regsubsets(model,data = reddit,nvmax =3,method = 'backward')
+
+coef(fit4 ,3)
+
+```
+Verifying your chosen method
+# 1.	Provide an appropriate definition of the criterion. Provide code to test the performance of the learned classifier. Compare it with the baseline method. Provide 
+```{r}
+set.seed(10)
+n<-runif(length(reddit), 0, 1)
+train<-reddit[n>0.2,]
+test<-reddit[n<=0.2,]
+test_factors <- c('over_18', "is_self", "is_reddit_media_domain")
+model<-as.formula(paste("brand_safe~", paste(test_factors, collapse="+")))
+fit<-glm(model,data = train,family=binomial())
+pred<-predict(fit,test)
+fit.pred=rep(1,length(pred))
+fit.pred[pred<0.5]= 0
+
+sum((as.integer(test$brand_safe)-1)==fit.pred)/(dim(test)[1])
+sum(as.integer(test$brand_safe)==2)/(dim(test)[1])
+```
+The test accuracy of our model is 0.67 compared to 0.53 baseline accuracy.
+
+# 2.	Perform feature/model selection with the criterion developed in Step 1 of Verifying your chosen method. Conclude whether the selection results are the same as those in Model/feature selection. Provide your selection results and associated code. Provide your selection results and associated code. [5 points]
+
+
+```{r}
+
+test_factors <- c("is_video", "stickied", "spoiler")
+model<-as.formula(paste("brand_safe~", paste(test_factors, collapse="+")))
+fit<-glm(model,data = train,family=binomial())
+pred<-predict(fit,test)
+fit.pred=rep(1,length(pred))
+fit.pred[pred<0.5]= 0
+
+sum((as.integer(test$brand_safe)-1)==fit.pred)/(dim(test)[1])
+
+```
+
+With the criterion developed in Step 1, the model with is_video, stickied and spoiler has a test accuracy of 0.47, even worse than the baseline. The reason is that in the model selection step, the algorithm considering the predict accuracy to select variables.
+
+
+
+
